@@ -1,12 +1,32 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import React, { useEffect } from 'react';
+import Header from '@/components/Header';
+import NavigationBar from '@/components/NavigationBar';
+import HeroSection from '@/components/HeroSection';
+import ResourcesSection from '@/components/ResourcesSection';
+import CommunitySection from '@/components/CommunitySection';
+import CareerSection from '@/components/CareerSection';
+import EventsSection from '@/components/EventsSection';
+import Footer from '@/components/Footer';
 
 const Index = () => {
+  // Update page title
+  useEffect(() => {
+    document.title = "Legal Portal | Resources, Community, Career, Events";
+  }, []);
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background relative">
+      <Header />
+      <NavigationBar />
+      <main>
+        <HeroSection />
+        <ResourcesSection />
+        <CommunitySection />
+        <CareerSection />
+        <EventsSection />
+      </main>
+      <Footer />
     </div>
   );
 };
