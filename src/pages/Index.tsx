@@ -1,6 +1,6 @@
 
 import React, { useEffect } from 'react';
-import Header from '@/components/Header';
+import AuthHeader from '@/components/AuthHeader';
 import NavigationBar from '@/components/NavigationBar';
 import HeroSection from '@/components/HeroSection';
 import ResourcesSection from '@/components/ResourcesSection';
@@ -17,7 +17,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background relative">
-      <Header />
+      <AuthHeader />
       <NavigationBar />
       <main>
         <HeroSection />

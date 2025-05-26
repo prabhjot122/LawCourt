@@ -89,6 +89,24 @@
     @apply border-border;
   }
 
+  /* Hide scrollbar for all elements */
+  html {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  html::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera on specific elements */
+  *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+
   body {
     @apply bg-background text-foreground;
     overflow-x: hidden;
