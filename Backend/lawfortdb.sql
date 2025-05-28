@@ -12,6 +12,10 @@
 -- 3. The admin account has full system privileges
 --
 -- =====================================================
+-- SELECT user, host, authentication_string FROM mysql.user;
+-- ALTER USER 'root'@'localhost' IDENTIFIED BY 'Sahil@123';
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'Sahil@123';
+FLUSH PRIVILEGES;
 
 CREATE DATABASE IF NOT EXISTS lawfort;
 
