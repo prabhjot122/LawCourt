@@ -8,17 +8,7 @@ from datetime import datetime
 from flask_cors import CORS
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-from feature_manage import feature_bp
-# Load environment variables from .env file
-load_dotenv()
-
-# Initialize Flask app
-app = Flask(__name__)
-# Enable CORS for all routes
-CORS(app, resources={r"/*": {"origins": "*"}})
-
-import os
-from dotenv import load_dotenv
+from features_manage import feature_bp
 from database import init_db_pool, get_db_connection
 
 # Load environment variables from .env file
@@ -29,29 +19,7 @@ app = Flask(__name__)
 # Enable CORS for all routes
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Database initialization
-def init_db_pool():
-    """Initialize the database connection pool"""
-    global connection_pool
-    
-    db_config = {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'user': os.getenv('DB_USER', 'root'),
-        'password': os.getenv('DB_PASSWORD', 'Sahil@123'),
-        'database': os.getenv('DB_NAME', 'lawfort'),
-        'pool_name': 'lawfortdb_pool',
-        'pool_size': int(os.getenv('DB_POOL_SIZE', 5)),
-        'auth_plugin': 'mysql_native_password'
-    }
-    
-    try:
-        connection_pool = pooling.MySQLConnectionPool(**db_config)
-        return True
-    except Exception as e:
-        print(f"Error initializing database connection pool: {e}")
-        return False
-
-# 替换为新的初始化逻辑
+# Initialize database on first request
 @app.before_request
 def initialize_db_pool_on_first_request():
     """Initialize the database connection pool on the first request"""
@@ -61,7 +29,7 @@ def initialize_db_pool_on_first_request():
             print("Failed to initialize database connection pool. The application may not work correctly.")
         _initialized = True
 
-# 添加全局标志变量
+# Global initialization flag
 _initialized = False
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'Sahil@123')
@@ -70,14 +38,6 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'Sahil@123')
 GOOGLE_CLIENT_ID = "517818204697-jpimspqvc3f4folciiapr6vbugs9t7hu.apps.googleusercontent.com"
 
 app.register_blueprint(feature_bp, url_prefix='/api')
-# Function to get database connection from pool
-def get_db_connection():
-    """Get a connection from the pool"""
-    try:
-        return connection_pool.get_connection()
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
-        raise
 
 # Import feature routes
 from features_manage import (

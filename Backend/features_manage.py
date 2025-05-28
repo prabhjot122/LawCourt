@@ -30,7 +30,7 @@ def create_blog_post(user_id, title, content, tags=None):
         if tags:
             for tag in tags:
                 cursor.execute("""
-                    INSERT INTO Post_Tags (Post_ID, Tag_Name)
+                    INSERT INTO Blog_Tags (Post_ID, Tag_Name)
                     VALUES (%s, %s)
                 """, (post_id, tag))
         
@@ -396,6 +396,86 @@ def get_internships(page=1, per_page=10, tag=None):
         cursor.close()
         conn.close()
 
+def create_learning_module(user_id, title, content, tags=None, video_url=None):
+    """Create a new learning module in the database"""
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        # Insert the new learning module into the database
+        query = """
+        INSERT INTO learning_modules (user_id, title, content, tags, video_url)
+        VALUES (%s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (user_id, title, content, tags, video_url))
+        connection.commit()
+        
+        # Fetch the newly created module's ID
+        module_id = cursor.lastrowid
+        
+        cursor.close()
+        connection.close()
+        
+        return {"message": "Learning module created successfully", "module_id": module_id}, 201
+    except Exception as e:
+        return {"error": str(e)}, 500
+    finally:
+        # Ensure resources are properly closed even if an exception occurs
+        if 'cursor' in locals():
+            cursor.close()
+        if 'connection' in locals():
+            connection.close()
+
+        # Add filters
+        where_clauses = []
+        params = []
+        
+        if tag:
+            where_clauses.append("i.Internship_ID IN (SELECT Internship_ID FROM Internship_Tags WHERE Tag_Name = %s)")
+            params.append(tag)
+        
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        
+        # Add group by, order by and limit
+        query += """
+            GROUP BY i.Internship_ID
+            ORDER BY i.Created_At DESC
+            LIMIT %s OFFSET %s
+        """
+        
+        params.extend([per_page, offset])
+        
+        cursor.execute(query, params)
+        internships = cursor.fetchall()
+        
+        # Get total count for pagination
+        count_query = "SELECT COUNT(DISTINCT i.Internship_ID) as total FROM Internships i"
+        if where_clauses:
+            count_query += " WHERE " + " AND ".join(where_clauses)
+        
+        cursor.execute(count_query, params[:-2] if params else [])
+
+        total = cursor.fetchone()['total']
+        
+        # Process internships to convert datetime objects to strings
+        for internship in internships:
+            internship['Created_At'] = internship['Created_At'].isoformat() if internship['Created_At'] else None
+            internship['Tags'] = internship['Tags'].split(',') if internship['Tags'] else []
+        
+        return {
+            "internships": internships,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": (total + per_page - 1) // per_page
+        }, 200
+    except Exception as e:
+        return {"error": str(e)}, 500
+    finally:
+        cursor.close()
+        conn.close()
+
 def get_internship(internship_id):
     """Get a single internship by ID"""
     conn = get_db_connection()
@@ -586,7 +666,7 @@ def apply_for_internship(internship_id, user_id):
                    p.Created_At, p.Updated_At,
                    GROUP_CONCAT(DISTINCT pt.Tag_Name) as Tags
             FROM Blog_Posts p
-            LEFT JOIN Post_Tags pt ON p.Post_ID = pt.Post_ID
+            LEFT JOIN Blog_Tags pt ON p.Post_ID = pt.Post_ID
             WHERE 1=1
         """
         
@@ -594,7 +674,7 @@ def apply_for_internship(internship_id, user_id):
         params = []
         
         if tag:
-            query += " AND p.Post_ID IN (SELECT Post_ID FROM Post_Tags WHERE Tag_Name = %s)"
+            query += " AND p.Post_ID IN (SELECT Post_ID FROM Blog_Tags WHERE Tag_Name = %s)"
             params.append(tag)
         
         # Add group by, order by and limit
@@ -614,7 +694,7 @@ def apply_for_internship(internship_id, user_id):
         count_params = []
         
         if tag:
-            count_query += " AND p.Post_ID IN (SELECT Post_ID FROM Post_Tags WHERE Tag_Name = %s)"
+            count_query += " AND p.Post_ID IN (SELECT Post_ID FROM Blog_Tags WHERE Tag_Name = %s)"
             count_params.append(tag)
         
         cursor.execute(count_query, count_params)
@@ -639,131 +719,7 @@ def apply_for_internship(internship_id, user_id):
         cursor.close()
         conn.close()
 
-def get_blog_post(post_id):
-    """Get a single blog post by ID"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # Get post
-        cursor.execute("""
-            SELECT p.Post_ID, p.User_ID, p.Title, p.Content, 
-                   p.Created_At, p.Updated_At
-            FROM Blog_Posts p
-            WHERE p.Post_ID = %s
-        """, (post_id,))
-        
-        post = cursor.fetchone()
-        
-        if not post:
-            return {"error": "Blog post not found"}, 404
-        
-        # Get tags
-        cursor.execute("SELECT Tag_Name FROM Post_Tags WHERE Post_ID = %s", (post_id,))
-        tags = [row['Tag_Name'] for row in cursor.fetchall()]
-        
-        # Process datetime objects
-        post['Created_At'] = post['Created_At'].isoformat() if post['Created_At'] else None
-        post['Updated_At'] = post['Updated_At'].isoformat() if post['Updated_At'] else None
-        post['Tags'] = tags
-        
-        return {"post": post}, 200
-    except Exception as e:
-        return {"error": str(e)}, 500
-    finally:
-        cursor.close()
-        conn.close()
-
-def update_blog_post(post_id, user_id, title=None, content=None, tags=None):
-    """Update an existing blog post"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Check if post exists and belongs to user
-        cursor.execute("SELECT User_ID FROM Blog_Posts WHERE Post_ID = %s", (post_id,))
-        post = cursor.fetchone()
-        
-        if not post:
-            return {"error": "Blog post not found"}, 404
-        
-        if post[0] != user_id:
-            return {"error": "Unauthorized to edit this blog post"}, 403
-        
-        # Update fields that are provided
-        update_fields = []
-        params = []
-        
-        if title is not None:
-            update_fields.append("Title = %s")
-            params.append(title)
-        
-        if content is not None:
-            update_fields.append("Content = %s")
-            params.append(content)
-        
-        update_fields.append("Updated_At = %s")
-        params.append(datetime.now())
-        
-        # Add post_id to params
-        params.append(post_id)
-        
-        # Execute update if there are fields to update
-        if update_fields:
-            query = f"UPDATE Blog_Posts SET {', '.join(update_fields)} WHERE Post_ID = %s"
-            cursor.execute(query, params)
-        
-        # Update tags if provided
-        if tags is not None:
-            # Delete existing tags
-            cursor.execute("DELETE FROM Post_Tags WHERE Post_ID = %s", (post_id,))
-            
-            # Add new tags
-            for tag in tags:
-                cursor.execute("""
-                    INSERT INTO Post_Tags (Post_ID, Tag_Name)
-                    VALUES (%s, %s)
-                """, (post_id, tag))
-        
-        conn.commit()
-        return {"message": "Blog post updated successfully"}, 200
-    except Exception as e:
-        conn.rollback()
-        return {"error": str(e)}, 500
-    finally:
-        cursor.close()
-        conn.close()
-
-def delete_blog_post(post_id, user_id):
-    """Delete a blog post"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Check if post exists and belongs to user
-        cursor.execute("SELECT User_ID FROM Blog_Posts WHERE Post_ID = %s", (post_id,))
-        post = cursor.fetchone()
-        
-        if not post:
-            return {"error": "Blog post not found"}, 404
-        
-        if post[0] != user_id:
-            return {"error": "Unauthorized to delete this blog post"}, 403
-        
-        # Delete related records first (tags)
-        cursor.execute("DELETE FROM Post_Tags WHERE Post_ID = %s", (post_id,))
-        
-        # Delete the post
-        cursor.execute("DELETE FROM Blog_Posts WHERE Post_ID = %s", (post_id,))
-        
-        conn.commit()
-        return {"message": "Blog post deleted successfully"}, 200
-    except Exception as e:
-        conn.rollback()
-        return {"error": str(e)}, 500
-    finally:
-        cursor.close()
-        conn.close()
+# Duplicate functions removed
 
 # ==================== RESEARCH PAPER FUNCTIONS ====================
 
@@ -2521,170 +2477,7 @@ def init_db_pool():
     except Exception as e:
         print(f"Error initializing database connection pool: {e}")
         return False
-        if difficulty_level:
-            query += " AND q.Difficulty_Level = %s"
-            params.append(difficulty_level)
-        
-        # Add order by and limit
-        query += """
-            ORDER BY q.Created_At DESC
-            LIMIT %s OFFSET %s
-        """
-        
-        params.extend([per_page, offset])
-        
-        cursor.execute(query, params)
-        quizzes = cursor.fetchall()
-        
-        # Get total count for pagination
-        count_query = "SELECT COUNT(*) as total FROM Quizzes q WHERE 1=1"
-        count_params = []
-        
-        if course_id:
-            count_query += " AND q.Course_ID = %s"
-            count_params.append(course_id)
-        
-        if difficulty_level:
-            count_query += " AND q.Difficulty_Level = %s"
-            count_params.append(difficulty_level)
-        
-        cursor.execute(count_query, count_params)
-        total = cursor.fetchone()['total']
-        
-        # Process quizzes
-        for quiz in quizzes:
-            quiz['Created_At'] = quiz['Created_At'].isoformat() if quiz['Created_At'] else None
-        
-        return {
-            "quizzes": quizzes,
-            "total": total,
-            "page": page,
-            "per_page": per_page,
-            "pages": (total + per_page - 1) // per_page
-        }, 200
-    except Exception as e:
-        return {"error": str(e)}, 500
-    finally:
-        cursor.close()
-        conn.close()
 
-def get_quiz(quiz_id, user_id=None):
-    """Get a single quiz by ID with questions"""
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    
-    try:
-        # Get quiz with creator info
-        cursor.execute("""
-            SELECT q.Quiz_ID, q.Creator_ID, q.Title, q.Description, 
-                   q.Time_Limit_Minutes, q.Passing_Score, q.Difficulty_Level, 
-                   q.Course_ID, q.Created_At, q.Enrollments, q.Average_Score,
-                   up.Full_Name as Creator_Name, up.Profile_Pic as Creator_Profile_Pic
-            FROM Quizzes q
-            LEFT JOIN User_Profile up ON q.Creator_ID = up.User_ID
-            WHERE q.Quiz_ID = %s
-        """, (quiz_id,))
-        
-        quiz = cursor.fetchone()
-        
-        if not quiz:
-            return {"error": "Quiz not found"}, 404
-        
-        # Get questions
-        cursor.execute("""
-            SELECT Question_ID, Question_Text, Question_Type, Options, Correct_Option, 
-                   Explanation, Created_At
-            FROM Quiz_Questions
-            WHERE Quiz_ID = %s
-            ORDER BY Question_ID
-        """, (quiz_id,))
-        
-        questions = cursor.fetchall()
-        
-        # Check if user is enrolled
-        is_enrolled = False
-        if user_id:
-            cursor.execute("""
-                SELECT Enrollment_ID FROM Quiz_Enrollments
-                WHERE Quiz_ID = %s AND User_ID = %s
-            """, (quiz_id, user_id))
-            
-            is_enrolled = cursor.fetchone() is not None
-        
-        # Process datetime objects and JSON
-        quiz['Created_At'] = quiz['Created_At'].isoformat() if quiz['Created_At'] else None
-        for question in questions:
-            question['Options'] = json.loads(question['Options']) if question['Options'] else []
-        
-        # Add questions to quiz
-        quiz['Questions'] = questions if is_enrolled or quiz['Creator_ID'] == user_id else []
-        quiz['Is_Enrolled'] = is_enrolled
-        
-        return {"quiz": quiz}, 200
-    except Exception as e:
-        return {"error": str(e)}, 500
-    finally:
-        cursor.close()
-        conn.close()
-
-def enroll_in_quiz(quiz_id, user_id):
-    """Enroll a user in a quiz"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Check if quiz exists
-        cursor.execute("SELECT Quiz_ID FROM Quizzes WHERE Quiz_ID = %s", (quiz_id,))
-        quiz = cursor.fetchone()
-        
-        if not quiz:
-            return {"error": "Quiz not found"}, 404
-        
-        # Check if already enrolled
-        cursor.execute("""
-            SELECT Enrollment_ID FROM Quiz_Enrollments
-            WHERE Quiz_ID = %s AND User_ID = %s
-        """, (quiz_id, user_id))
-        
-        if cursor.fetchone():
-            return {"error": "Already enrolled in this quiz"}, 400
-        
-        # Insert enrollment
-        cursor.execute("""
-            INSERT INTO Quiz_Enrollments (
-                Quiz_ID, User_ID, Enrolled_At, Score, Last_Activity
-            )
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
-            quiz_id, user_id, datetime.now(), None, datetime.now()
-        ))
-        
-        # Update quiz enrollment count
-        cursor.execute("""
-            UPDATE Quizzes SET Enrollments = Enrollments + 1
-            WHERE Quiz_ID = %s
-        """, (quiz_id,))
-        
-        conn.commit()
-        return {"message": "Successfully enrolled in quiz"}, 201
-    except Exception as e:
-        conn.rollback()
-        return {"error": str(e)}, 500
-    finally:
-        cursor.close()
-        conn.close()
-
-def submit_quiz(quiz_id, user_id, answers):
-    """Submit answers for a quiz"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    try:
-        # Check if enrolled
-        cursor.execute("""
-            SELECT Enrollment_ID FROM Quiz_Enrollments
-            WHERE Quiz_ID = %s AND User_ID = %s
-        """, (quiz_id, user_id))
         
         enrollment = cursor.fetchone()
         if not enrollment:
