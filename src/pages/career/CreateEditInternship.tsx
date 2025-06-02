@@ -1,0 +1,296 @@
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { contentApi } from '@/services/api';
+
+const CreateEditInternship = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
+  const [saving, setSaving] = useState(false);
+
+  const [formData, setFormData] = useState({
+    title: '',
+    company_name: '',
+    location: '',
+    internship_type: 'Full-time',
+    duration: '',
+    stipend: '',
+    content: '',
+    eligibility_criteria: '',
+    application_deadline: '',
+    contact_email: '',
+    contact_phone: '',
+    summary: '',
+    tags: '',
+    is_featured: false,
+  });
+
+  // Check if user has permission to create internships
+  const canCreateInternships = isAuthenticated && user && (user.role === 'Admin' || user.role === 'Editor');
+
+  if (!canCreateInternships) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+            <p className="text-gray-600 mb-4">You need Editor or Admin privileges to create internship postings.</p>
+            <Button asChild>
+              <Link to="/internships">Back to Internships</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validate required fields
+    if (!formData.title.trim() || !formData.company_name.trim() || !formData.location.trim() ||
+        !formData.content.trim() || !formData.application_deadline) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await contentApi.createInternship({
+        title: formData.title,
+        content: formData.content,
+        company_name: formData.company_name,
+        location: formData.location,
+        internship_type: formData.internship_type,
+        duration: formData.duration,
+        stipend: formData.stipend,
+        application_deadline: formData.application_deadline,
+        requirements: formData.eligibility_criteria,
+        summary: formData.summary,
+        tags: formData.tags,
+      });
+
+      toast({
+        title: "Success",
+        description: "Internship posting created successfully!",
+      });
+
+      navigate('/internships');
+    } catch (error: any) {
+      console.error('Error creating internship:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create internship posting. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <Button variant="ghost" asChild>
+        <Link to="/internships" className="flex items-center gap-2">
+          <ArrowLeft className="h-4 w-4" />
+          Back to Internships
+        </Link>
+      </Button>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Post New Internship</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="title">Internship Title *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="e.g. Legal Research Intern"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="company_name">Company *</Label>
+                <Input
+                  id="company_name"
+                  value={formData.company_name}
+                  onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                  placeholder="Company name"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="location">Location *</Label>
+                <Input
+                  id="location"
+                  value={formData.location}
+                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  placeholder="City, State"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="internship_type">Internship Type</Label>
+                <Select value={formData.internship_type} onValueChange={(value) => setFormData({ ...formData, internship_type: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select internship type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Full-time">Full-time</SelectItem>
+                    <SelectItem value="Part-time">Part-time</SelectItem>
+                    <SelectItem value="Remote">Remote</SelectItem>
+                    <SelectItem value="Hybrid">Hybrid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="duration">Duration</Label>
+                <Input
+                  id="duration"
+                  value={formData.duration}
+                  onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                  placeholder="3 months"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="stipend">Stipend</Label>
+                <Input
+                  id="stipend"
+                  value={formData.stipend}
+                  onChange={(e) => setFormData({ ...formData, stipend: e.target.value })}
+                  placeholder="$2,000/month"
+                />
+              </div>
+              <div>
+                <Label htmlFor="application_deadline">Application Deadline *</Label>
+                <Input
+                  id="application_deadline"
+                  type="date"
+                  value={formData.application_deadline}
+                  onChange={(e) => setFormData({ ...formData, application_deadline: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="summary">Summary</Label>
+              <Textarea
+                id="summary"
+                value={formData.summary}
+                onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
+                rows={3}
+                placeholder="Brief summary of the internship..."
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="content">Internship Description *</Label>
+              <Textarea
+                id="content"
+                value={formData.content}
+                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                rows={6}
+                placeholder="Detailed description of the internship, responsibilities, and learning opportunities..."
+                required
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="eligibility_criteria">Eligibility Criteria</Label>
+              <Textarea
+                id="eligibility_criteria"
+                value={formData.eligibility_criteria}
+                onChange={(e) => setFormData({ ...formData, eligibility_criteria: e.target.value })}
+                rows={4}
+                placeholder="Specific requirements and qualifications..."
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="contact_email">Contact Email</Label>
+                <Input
+                  id="contact_email"
+                  type="email"
+                  value={formData.contact_email}
+                  onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                  placeholder="hr@company.com"
+                />
+              </div>
+              <div>
+                <Label htmlFor="contact_phone">Contact Phone</Label>
+                <Input
+                  id="contact_phone"
+                  value={formData.contact_phone}
+                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                  placeholder="(555) 123-4567"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="tags">Tags (comma-separated)</Label>
+              <Input
+                id="tags"
+                value={formData.tags}
+                onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                placeholder="legal, research, internship"
+              />
+            </div>
+
+            <div className="flex justify-end gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate('/internships')}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saving || !formData.title.trim() || !formData.company_name.trim() || !formData.content.trim()}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Publish Internship'
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default CreateEditInternship;
